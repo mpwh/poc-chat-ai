@@ -13,57 +13,57 @@ import DocumentsPage from "./pages/DocumentsPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
-
-  if (loading) return null;
-
-  if (!user) {
-    setLocation("/login");
-    return null;
-  }
-
-  return <Component />;
-}
-
-function Router() {
-  const { user } = useAuth();
-
+function AuthenticatedApp() {
   return (
     <SidebarProvider>
-      {user ? (
-        <Layout>
-          <Switch>
-            <Route path="/" component={() => <ProtectedRoute component={DocumentsPage} />} />
-            <Route path="/chat/:id" component={() => <ProtectedRoute component={ChatPage} />} />
-            <Route>404 Page Not Found</Route>
-          </Switch>
-        </Layout>
-      ) : (
+      <Layout>
         <Switch>
-          <Route path="/login" component={LoginPage} />
-          <Route path="/signup" component={SignupPage} />
-          <Route>
-            {() => {
-              const [, setLocation] = useLocation();
-              setLocation("/login");
-              return null;
-            }}
-          </Route>
+          <Route path="/" component={DocumentsPage} />
+          <Route path="/chat/:id" component={ChatPage} />
+          <Route>404 Page Not Found</Route>
         </Switch>
-      )}
+      </Layout>
     </SidebarProvider>
   );
 }
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Router />
-        <Toaster />
-      </AuthProvider>
-    </QueryClientProvider>
-  </StrictMode>,
-);
+function UnauthenticatedApp() {
+  return (
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route path="/signup" component={SignupPage} />
+      <Route>
+        {() => {
+          const [, setLocation] = useLocation();
+          setLocation("/login");
+          return null;
+        }}
+      </Route>
+    </Switch>
+  );
+}
+
+function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
+
+  return user ? <AuthenticatedApp /> : <UnauthenticatedApp />;
+}
+
+const rootElement = document.getElementById("root");
+if (!rootElement?.innerHTML) {
+  const root = createRoot(rootElement!);
+  root.render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <App />
+          <Toaster />
+        </AuthProvider>
+      </QueryClientProvider>
+    </StrictMode>
+  );
+}
