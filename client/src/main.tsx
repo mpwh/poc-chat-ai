@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { Switch, Route, useLocation } from "wouter";
 import "./index.css";
@@ -27,18 +27,20 @@ function AuthenticatedApp() {
   );
 }
 
+function RedirectToLogin() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/login");
+  }, [setLocation]);
+  return null;
+}
+
 function UnauthenticatedApp() {
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
-      <Route>
-        {() => {
-          const [, setLocation] = useLocation();
-          setLocation("/login");
-          return null;
-        }}
-      </Route>
+      <Route component={RedirectToLogin} />
     </Switch>
   );
 }
