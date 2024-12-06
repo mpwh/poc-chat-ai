@@ -4,7 +4,10 @@ import { db } from "../../db";
 import { users } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET || "";
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET must be set");
+}
 const SALT_ROUNDS = 10;
 
 export interface LoginResponse {
@@ -33,8 +36,11 @@ export function generateToken(userId: number): string {
 
 export function verifyToken(token: string): { userId: number } {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
-    return decoded;
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (typeof decoded === 'object' && decoded !== null && 'userId' in decoded) {
+      return { userId: decoded.userId as number };
+    }
+    throw new Error("Invalid token payload");
   } catch (error) {
     throw new Error("Invalid token");
   }

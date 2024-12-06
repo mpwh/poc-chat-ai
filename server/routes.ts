@@ -59,13 +59,31 @@ const upload = multer({
 export function registerRoutes(app: Express) {
   // Auth routes with local PostgreSQL authentication
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
-    const { email, password, name } = req.body;
     try {
-      const user = await createUser(email, password, name);
-      res.json({ user });
+      // Validate request body
+      const { email, password, name } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+      
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+
+      if (!email.includes('@')) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+
+      const user = await createUser(email, password, name || email.split('@')[0]);
+      const response = await loginUser(email, password); // Automatically log in after signup
+      res.json(response);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Signup failed";
+      const errorMessage = error instanceof Error ? error.message : "Signup failed";
+      
+      if (errorMessage.includes('unique constraint')) {
+        return res.status(409).json({ error: "Email already registered" });
+      }
+      
       res.status(400).json({ error: errorMessage });
     }
   });
