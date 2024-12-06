@@ -14,10 +14,10 @@ interface DocumentListProps {
   documents: Document[];
 }
 
-export default function DocumentList({ documents }: DocumentListProps) {
+export default function DocumentList({ documents = [] }: DocumentListProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {documents.map((doc) => (
+      {Array.isArray(documents) && documents.map((doc) => (
         <Link key={doc.id} href={`/chat/${doc.id}`}>
           <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
