@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar as SidebarPrimitive,
@@ -6,14 +6,40 @@ import {
   SidebarContent,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { FileText, MessageSquare, Plus } from "lucide-react";
+import { FileText, MessageSquare, Plus, LogOut } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const { logout } = useAuth();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast({
+        title: "Success",
+        description: "Logged out successfully",
+      });
+      setLocation("/login");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to logout",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex h-screen">
       <SidebarPrimitive className="border-r">
-        <SidebarHeader className="px-4 py-2">
+        <SidebarHeader className="px-4 py-2 flex justify-between items-center">
           <h1 className="text-xl font-bold">DocChat AI</h1>
+          <Button variant="ghost" size="icon" onClick={handleLogout}>
+            <LogOut className="h-4 w-4" />
+          </Button>
         </SidebarHeader>
         <SidebarContent>
           <ScrollArea className="h-[calc(100vh-5rem)]">

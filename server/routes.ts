@@ -3,7 +3,7 @@ import { db } from "../db";
 import { documents, chats, messages, users } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { analyzeDocument, getChatResponse } from "./lib/openai";
-import { supabase } from "./lib/supabase";
+import { createUser, loginUser, verifyToken } from "./lib/auth";
 import multer from "multer";
 
 // Define custom Request type with user property
@@ -27,31 +27,19 @@ const authMiddleware = async (
 
   try {
     const token = authHeader.split(" ")[1];
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token);
+    const { userId } = verifyToken(token);
 
-    if (authError || !user?.email) {
-      throw authError || new Error("User not found");
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) {
+      throw new Error("User not found");
     }
 
-    // Get or create user in our database
-    const [dbUser] = await db
-      .insert(users)
-      .values({
-        email: user.email,
-        name: user.email.split("@")[0], // Use email prefix as name
-      })
-      .onConflictDoUpdate({
-        target: users.email,
-        set: { name: user.email.split("@")[0] },
-      })
-      .returning();
-
     req.user = {
-      id: dbUser.id,
-      email: dbUser.email,
+      id: user.id,
+      email: user.email,
     };
     next();
   } catch (error) {
@@ -69,16 +57,12 @@ const upload = multer({
 });
 
 export function registerRoutes(app: Express) {
-  // Auth routes - simplified to email/password only
+  // Auth routes with local PostgreSQL authentication
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
-    const { email, password } = req.body;
+    const { email, password, name } = req.body;
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-      if (error) throw error;
-      res.json(data);
+      const user = await createUser(email, password, name);
+      res.json({ user });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Signup failed";
@@ -89,18 +73,41 @@ export function registerRoutes(app: Express) {
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     const { email, password } = req.body;
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
-      res.json(data);
+      const response = await loginUser(email, password);
+      res.json(response);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Login failed";
       res.status(400).json({ error: errorMessage });
     }
   });
+  // Get current user
+  app.get("/api/auth/me", authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+    try {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, req.user.id),
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        },
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to get user data";
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
 
   // Document routes with auth middleware
   app.post(
