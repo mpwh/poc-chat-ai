@@ -41,11 +41,19 @@ export default function DocumentUpload() {
     try {
       setIsUploading(true);
       const formData = new FormData();
+      
+      // Create a sanitized title from the filename
+      const sanitizedTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9-_]/g, "_");
       formData.append("file", file);
-      formData.append("title", file.name);
+      formData.append("title", sanitizedTitle);
 
       const token = localStorage.getItem("token");
-      if (!token) throw new Error("Not authenticated");
+      if (!token) {
+        throw new Error("Please login to upload documents");
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
       const res = await fetch("/api/documents", {
         method: "POST",
@@ -53,7 +61,10 @@ export default function DocumentUpload() {
           "Authorization": `Bearer ${token}`,
         },
         body: formData,
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const error = await res.json();

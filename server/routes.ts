@@ -75,15 +75,24 @@ export function registerRoutes(app: Express) {
           size: req.file.size
         });
         
-        // Store file content directly in the database
-        const fileUrl = `document-${Date.now()}-${req.file.originalname}`;
+        // Read and process file content
+        let fileContent = '';
+        if (req.file.mimetype === 'text/plain') {
+          fileContent = req.file.buffer.toString('utf-8');
+        } else {
+          // For other file types, store as base64
+          fileContent = req.file.buffer.toString('base64');
+        }
+
+        // Generate a unique file identifier
+        const fileUrl = `document-${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
         
         const [document] = await db.insert(documents)
           .values({
             title: req.body.title || req.file.originalname,
-            content: req.file.buffer.toString('base64'),
+            content: fileContent,
             file_type: req.file.mimetype,
-            file_url: fileUrl, // Add the file URL
+            file_url: fileUrl,
             user_id: req.user.id,
           })
           .returning();
