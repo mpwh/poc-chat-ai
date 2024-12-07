@@ -75,8 +75,8 @@ export function registerRoutes(app: Express) {
           size: req.file.size
         });
         
-        // Generate a simple file URL (you might want to use a proper file storage service)
-        const fileUrl = `/uploads/${Date.now()}-${req.file.originalname}`;
+        // Store file content directly in the database
+        const fileUrl = `document-${Date.now()}-${req.file.originalname}`;
         
         const [document] = await db.insert(documents)
           .values({

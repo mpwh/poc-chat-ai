@@ -14,6 +14,29 @@ export default function DocumentUpload() {
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    
+    // Validate file type
+    const allowedTypes = ['text/plain', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Error",
+        description: "Invalid file type. Please upload a PDF, DOC, or TXT file.",
+        variant: "destructive"
+      });
+      event.target.value = '';
+      return;
+    }
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "Error",
+        description: "File size exceeds 10MB limit.",
+        variant: "destructive"
+      });
+      event.target.value = '';
+      return;
+    }
 
     try {
       setIsUploading(true);
@@ -68,11 +91,14 @@ export default function DocumentUpload() {
             <p className="text-sm text-muted-foreground">
               PDF, DOC, TXT up to 10MB
             </p>
-            {isUploading && (
-              <p className="text-sm text-muted-foreground">
-                Uploading...
-              </p>
-            )}
+            {isUploading ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <p className="text-sm text-muted-foreground">
+                  Uploading document...
+                </p>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
