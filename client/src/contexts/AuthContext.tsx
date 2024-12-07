@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 
 interface User {
   id: number;
@@ -9,9 +9,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  error: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  login: (token: string, user: User) => void;
   logout: () => Promise<void>;
 }
 
@@ -20,94 +18,50 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if there's a stored token and try to get user data
-    const token = localStorage.getItem("token");
-    if (token) {
-      fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.user) {
-            setUser(data.user);
+    // Check for stored token on mount
+    const checkAuth = async () => {
+      const token = localStorage.getItem("token");
+      if (token) {
+        try {
+          const response = await fetch("/api/auth/me", {
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            setUser(userData);
           } else {
+            // If token is invalid, clear it
             localStorage.removeItem("token");
           }
-        })
-        .catch(() => {
+        } catch (error) {
+          console.error("Auth check failed:", error);
           localStorage.removeItem("token");
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
+        }
+      }
       setLoading(false);
-    }
+    };
+
+    checkAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    try {
-      setError(null);
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
-      localStorage.setItem("token", data.token);
-      setUser(data.user);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to login");
-      throw e;
-    }
-  };
-
-  const signup = async (email: string, password: string) => {
-    try {
-      setError(null);
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name: email.split("@")[0] }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Signup failed");
-      }
-
-      // After signup, automatically log in
-      await login(email, password);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to sign up");
-      throw e;
-    }
+  const login = (token: string, userData: User) => {
+    localStorage.setItem("token", token);
+    setUser(userData);
   };
 
   const logout = async () => {
-    try {
-      setError(null);
-      localStorage.removeItem("token");
-      setUser(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to logout");
-      throw e;
-    }
+    localStorage.removeItem("token");
+    setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, signup, logout }}>
-      {!loading && children}
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
+      {children}
     </AuthContext.Provider>
   );
 }

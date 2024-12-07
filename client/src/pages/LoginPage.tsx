@@ -1,24 +1,18 @@
 import { useForm } from "react-hook-form";
-import { useLocation } from "wouter";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useAuth } from "../contexts/AuthContext";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useLocation } from "wouter";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "wouter";
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email(),
+  password: z.string().min(6),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -38,7 +32,20 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginForm) => {
     try {
-      await login(data.email, data.password);
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.error || "Login failed");
+      }
+
+      login(responseData.token, responseData.user);
+      
       toast({
         title: "Success",
         description: "Logged in successfully",
@@ -88,21 +95,17 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
-              <div className="space-y-2">
-                <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                  Login
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => setLocation("/signup")}
-                >
-                  Don't have an account? Sign up
-                </Button>
-              </div>
+              <Button type="submit" className="w-full">
+                Login
+              </Button>
             </form>
           </Form>
+          <div className="mt-4 text-center text-sm">
+            Don't have an account?{" "}
+            <Link href="/signup" className="text-primary hover:underline">
+              Sign up
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

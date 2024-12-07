@@ -1,293 +1,245 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response } from "express";
 import { db } from "../db";
-import { documents, chats, messages, users } from "@db/schema";
-import { eq } from "drizzle-orm";
-import { analyzeDocument, getChatResponse } from "./lib/openai";
+import { documents, users } from "@db/schema";
+import { eq, desc } from "drizzle-orm";
 import { createUser, loginUser, verifyToken } from "./lib/auth";
 import multer from "multer";
+import { streamChatResponse } from "./lib/openai";
+import chatRouter from "./routes/chat";
+import { AuthRequest } from "./middleware/auth";
 
-// Define custom Request type with user property
-interface AuthRequest extends Request {
-  user?: {
-    id: number;
-    email: string;
-  };
-}
-
-// Auth middleware with proper typing
-const authMiddleware = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: "No authorization header" });
-  }
-
+const authMiddleware = async (req: AuthRequest, res: Response, next: Function) => {
   try {
-    const token = authHeader.split(" ")[1];
-    const { userId } = verifyToken(token);
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "No token provided" });
 
+    const { userId } = verifyToken(token);
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
     });
+    if (!user) throw new Error("User not found");
 
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    req.user = {
-      id: user.id,
-      email: user.email,
-    };
+    req.user = { id: user.id };
     next();
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unauthorized";
-    return res.status(401).json({ error: errorMessage });
+    res.status(401).json({ error: "Unauthorized" });
   }
 };
 
-// Configure multer for memory storage
+// Configure multer for file uploads
 const upload = multer({
-  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
+  }
 });
 
 export function registerRoutes(app: Express) {
-  // Auth routes with local PostgreSQL authentication
+  // Add the chat router
+  app.use("/api/chat", chatRouter);
+
+  // Auth routes
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     try {
-      // Validate request body
       const { email, password, name } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ error: "Email and password are required" });
-      }
-      
-      if (password.length < 6) {
-        return res.status(400).json({ error: "Password must be at least 6 characters long" });
-      }
-
-      if (!email.includes('@')) {
-        return res.status(400).json({ error: "Invalid email format" });
-      }
-
-      const user = await createUser(email, password, name || email.split('@')[0]);
-      const response = await loginUser(email, password); // Automatically log in after signup
+      const user = await createUser(email, password, name);
+      const response = await loginUser(email, password);
       res.json(response);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Signup failed";
-      
-      if (errorMessage.includes('unique constraint')) {
-        return res.status(409).json({ error: "Email already registered" });
-      }
-      
-      res.status(400).json({ error: errorMessage });
+      res.status(400).json({ error: error instanceof Error ? error.message : "Signup failed" });
     }
   });
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {
-    const { email, password } = req.body;
     try {
+      const { email, password } = req.body;
       const response = await loginUser(email, password);
       res.json(response);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Login failed";
-      res.status(400).json({ error: errorMessage });
-    }
-  });
-  // Get current user
-  app.get("/api/auth/me", authMiddleware, async (req: AuthRequest, res: Response) => {
-    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
-    try {
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, req.user.id),
-      });
-
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      res.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        },
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to get user data";
-      res.status(500).json({ error: errorMessage });
+      res.status(401).json({ error: error instanceof Error ? error.message : "Login failed" });
     }
   });
 
-
-  // Document routes with auth middleware
-  app.post(
-    "/api/documents",
-    authMiddleware,
-    upload.single("file"),
-    async (req: AuthRequest, res: Response) => {
-      const { title } = req.body;
-      const file = req.file;
-
-      if (!file) return res.status(400).json({ error: "No file provided" });
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
+  // Document routes
+  app.post("/api/documents", authMiddleware, upload.single("file"), 
+    async (req: AuthRequest & { file?: Express.Multer.File }, res: Response) => {
       try {
-        const content = file.buffer.toString();
-        const analysis = await analyzeDocument(content);
+        if (!req.file || !req.user) {
+          return res.status(400).json({ 
+            error: !req.file ? "No file uploaded" : "Unauthorized" 
+          });
+        }
 
-        const [document] = await db
-          .insert(documents)
+        console.log("File received:", {
+          originalname: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size
+        });
+        
+        // Generate a simple file URL (you might want to use a proper file storage service)
+        const fileUrl = `/uploads/${Date.now()}-${req.file.originalname}`;
+        
+        const [document] = await db.insert(documents)
           .values({
-            title,
-            content: analysis,
-            file_url: "", // Store content directly
-            file_type: file.mimetype,
+            title: req.body.title || req.file.originalname,
+            content: req.file.buffer.toString('base64'),
+            file_type: req.file.mimetype,
+            file_url: fileUrl, // Add the file URL
             user_id: req.user.id,
           })
           .returning();
 
         res.json(document);
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to process document";
-        res.status(500).json({ error: errorMessage });
-      }
-    }
-  );
-
-  app.get(
-    "/api/documents",
-    authMiddleware,
-    async (req: AuthRequest, res: Response) => {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
-      try {
-        const userDocuments = await db.query.documents.findMany({
-          where: eq(documents.user_id, req.user.id),
-          orderBy: documents.created_at,
+        console.error("Upload error:", error);
+        res.status(500).json({ 
+          error: error instanceof Error ? error.message : "Upload failed" 
         });
-        res.json(userDocuments);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to fetch documents";
-        res.status(500).json({ error: errorMessage });
       }
     }
   );
 
-  // Chat routes
-  app.post(
-    "/api/chats",
-    authMiddleware,
+  app.get("/api/documents", authMiddleware, 
     async (req: AuthRequest, res: Response) => {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
       try {
-        const { document_id, title } = req.body;
-        const [chat] = await db
-          .insert(chats)
-          .values({
-            document_id,
-            title,
-            user_id: req.user.id,
-          })
-          .returning();
-        res.json(chat);
+        if (!req.user) throw new Error("Unauthorized");
+        
+        const docs = await db.query.documents.findMany({
+          where: eq(documents.user_id, req.user.id),
+          orderBy: desc(documents.created_at),
+        });
+        res.json(docs);
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to create chat";
-        res.status(500).json({ error: errorMessage });
+        res.status(500).json({ error: "Failed to fetch documents" });
       }
     }
   );
 
-  app.post(
-    "/api/chats/:chatId/messages",
-    authMiddleware,
+  // Add chat endpoint
+  app.post("/api/documents/:id/chat", authMiddleware,
     async (req: AuthRequest, res: Response) => {
-      const { content } = req.body;
-      const chatId = parseInt(req.params.chatId);
-
       try {
-        // Save user message
-        const [userMessage] = await db
-          .insert(messages)
-          .values({
-            chat_id: chatId,
-            content,
-            role: "user",
-          })
-          .returning();
+        const { id } = req.params;
+        const { message } = req.body;
 
-        // Get chat with document
-        type ChatWithDocument = {
-          document: {
-            content: string;
-            title: string;
-          } | null;
-        };
+        if (!req.user) throw new Error("Unauthorized");
 
-        const chat = await db.query.chats.findFirst({
-          where: eq(chats.id, chatId),
-          with: {
-            document: {
-              columns: {
-                content: true,
-                title: true
-              }
-            },
-          },
-        }) as ChatWithDocument | null;
+        // Fetch the document
+        const [document] = await db.query.documents.findMany({
+          where: eq(documents.id, Number(id)),
+          limit: 1,
+        });
 
-        if (!chat?.document?.content) {
-          throw new Error("Chat or document content not found");
+        if (!document) {
+          return res.status(404).json({ error: "Document not found" });
         }
 
-        // Get AI response
-        const aiResponse = await getChatResponse(content, chat.document.content);
+        // Get content from base64
+        const content = Buffer.from(document.content, 'base64').toString();
+        
+        // Set headers for streaming
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
 
-        // Save AI message
-        const [aiMessage] = await db
-          .insert(messages)
-          .values({
-            chat_id: chatId,
-            content: aiResponse,
-            role: "assistant",
-          })
-          .returning();
+        // Stream the response
+        for await (const chunk of streamChatResponse(message, [{
+          id: document.id,
+          content: content
+        }])) {
+          res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+        }
 
-        res.json([userMessage, aiMessage]);
+        res.write('data: [DONE]\n\n');
+        res.end();
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to process message";
-        res.status(500).json({ error: errorMessage });
+        console.error("Chat error:", error);
+        res.status(500).json({ 
+          error: error instanceof Error ? error.message : "Failed to get response" 
+        });
       }
     }
   );
 
-  app.get(
-    "/api/chats/:chatId/messages",
-    authMiddleware,
+  // Add single document fetch endpoint
+  app.get("/api/documents/:id", authMiddleware,
     async (req: AuthRequest, res: Response) => {
-      const chatId = parseInt(req.params.chatId);
       try {
-        const chatMessages = await db.query.messages.findMany({
-          where: eq(messages.chat_id, chatId),
-          orderBy: messages.created_at,
+        const { id } = req.params;
+        if (!req.user) throw new Error("Unauthorized");
+
+        const [document] = await db.query.documents.findMany({
+          where: eq(documents.id, Number(id)),
+          limit: 1,
         });
-        res.json(chatMessages);
+
+        if (!document) {
+          return res.status(404).json({ error: "Document not found" });
+        }
+
+        res.json(document);
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to fetch messages";
-        res.status(500).json({ error: errorMessage });
+        res.status(500).json({ error: "Failed to fetch document" });
+      }
+    }
+  );
+
+  // Add this to your existing routes
+  app.get("/api/auth/me", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Get user data without password
+      const [user] = await db.query.users.findMany({
+        where: eq(users.id, req.user.id),
+        columns: {
+          id: true,
+          email: true,
+          name: true,
+        },
+        limit: 1,
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/documents/:id", authMiddleware, 
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+        if (!req.user) throw new Error("Unauthorized");
+
+        // Check if document exists and belongs to user
+        const [document] = await db.query.documents.findMany({
+          where: eq(documents.id, parseInt(id)),
+          limit: 1,
+        });
+
+        if (!document) {
+          return res.status(404).json({ error: "Document not found" });
+        }
+
+        if (document.user_id !== req.user.id) {
+          return res.status(403).json({ error: "Not authorized to delete this document" });
+        }
+
+        // Delete the document
+        await db.delete(documents)
+          .where(eq(documents.id, parseInt(id)));
+
+        res.json({ message: "Document deleted successfully" });
+      } catch (error) {
+        console.error("Delete error:", error);
+        res.status(500).json({ error: "Failed to delete document" });
       }
     }
   );

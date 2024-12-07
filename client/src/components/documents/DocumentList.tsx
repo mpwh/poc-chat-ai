@@ -1,13 +1,14 @@
-import { Link } from "wouter";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { FileText, Calendar } from "lucide-react";
+import { FileText, Calendar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 interface Document {
   id: number;
   title: string;
-  created_at: string;
   file_type: string;
+  created_at: string;
 }
 
 interface DocumentListProps {
@@ -15,25 +16,65 @@ interface DocumentListProps {
 }
 
 export default function DocumentList({ documents = [] }: DocumentListProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const handleDelete = async (id: number) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Not authenticated");
+
+      const res = await fetch(`/api/documents/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+
+      if (!res.ok) throw new Error("Failed to delete document");
+
+      await queryClient.invalidateQueries({ queryKey: ["documents"] });
+
+      toast({
+        title: "Success",
+        description: "Document deleted successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete document",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {Array.isArray(documents) && documents.map((doc) => (
-        <Link key={doc.id} href={`/chat/${doc.id}`}>
-          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {doc.title}
-              </CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center text-sm text-muted-foreground">
-                <Calendar className="mr-2 h-4 w-4" />
-                {format(new Date(doc.created_at), "MMM d, yyyy")}
+    <div className="space-y-4">
+      {documents.map((doc) => (
+        <div
+          key={doc.id}
+          className="flex items-center justify-between p-4 bg-background border rounded-lg"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-medium">{doc.title}</h3>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{doc.file_type.split('/')[1].toUpperCase()}</span>
+                <span>•</span>
+                <span>{format(new Date(doc.created_at), "MMM d, yyyy")}</span>
               </div>
-            </CardContent>
-          </Card>
-        </Link>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleDelete(doc.id)}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       ))}
     </div>
   );

@@ -1,34 +1,23 @@
 import { useForm } from "react-hook-form";
-import { useLocation } from "wouter";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useAuth } from "../contexts/AuthContext";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useLocation } from "wouter";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 const signupSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
+  email: z.string().email(),
+  password: z.string().min(6),
+  name: z.string().min(2),
 });
 
 type SignupForm = z.infer<typeof signupSchema>;
 
 export default function SignupPage() {
-  const { signup } = useAuth();
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -37,16 +26,27 @@ export default function SignupPage() {
     defaultValues: {
       email: "",
       password: "",
-      confirmPassword: "",
+      name: "",
     },
   });
 
   const onSubmit = async (data: SignupForm) => {
     try {
-      await signup(data.email, data.password);
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.error || "Signup failed");
+      }
+
       toast({
         title: "Success",
-        description: "Account created successfully. Please check your email for verification.",
+        description: "Account created successfully. Please log in.",
       });
       setLocation("/login");
     } catch (error) {
@@ -82,6 +82,19 @@ export default function SignupPage() {
               />
               <FormField
                 control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter your name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
@@ -93,34 +106,17 @@ export default function SignupPage() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="Confirm your password" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="space-y-2">
-                <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                  Sign Up
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => setLocation("/login")}
-                >
-                  Already have an account? Login
-                </Button>
-              </div>
+              <Button type="submit" className="w-full">
+                Sign Up
+              </Button>
             </form>
           </Form>
+          <div className="mt-4 text-center text-sm">
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary hover:underline">
+              Login
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>
