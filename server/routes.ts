@@ -1,8 +1,8 @@
 import type { Express } from "express";
-import { createUser, loginUser } from "./lib/auth";
-import { authenticateToken } from "./middleware/auth";
-import documentsRouter from "./routes/documents";
-import chatRouter from "./routes/chat";
+import { createUser, loginUser } from "./lib/auth.js";
+import { authenticateToken } from "./middleware/auth.js";
+import documentsRouter from "./routes/documents.js";
+import chatRouter from "./routes/chat.js";
 
 export default function setupRoutes(app: Express) {
   // Auth routes

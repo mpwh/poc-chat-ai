@@ -1,9 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
-import { db } from "../../db";
-import { documents } from "@db/schema";
+import { db } from "../../db/index.js";
+import { documents } from "../../db/schema.js";
 import { eq, and } from "drizzle-orm";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 

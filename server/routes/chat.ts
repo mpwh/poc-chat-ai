@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticateToken, AuthRequest } from "../middleware/auth";
-import { streamChatResponse } from "../lib/openai";
+import { authenticateToken, AuthRequest } from "../middleware/auth.js";
+import { streamChatResponse } from "../lib/openai.js";
 
 const router = Router();
 
