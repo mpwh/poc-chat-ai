@@ -1,11 +1,10 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { MessageSquare } from "lucide-react";
 
 interface SuggestedQuestionsProps {
-  onSelect: (question: string) => void;
+  onSelectQuestion: (question: string) => void;
 }
 
-export default function SuggestedQuestions({ onSelect }: SuggestedQuestionsProps) {
+export default function SuggestedQuestions({ onSelectQuestion }: SuggestedQuestionsProps) {
   const questions = [
     "Bagaimana langkah awal mengoperasikan Mesin MMS-i Fico?",
     "Apa saja yang perlu diperiksa sebelum menggunakan Mesin Double Action Press?",
@@ -15,24 +14,22 @@ export default function SuggestedQuestions({ onSelect }: SuggestedQuestionsProps
   ];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pertanyaan Umum</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {questions.map((question, index) => (
-            <Button
-              key={index}
-              variant="ghost"
-              className="w-full justify-start text-left h-auto whitespace-normal"
-              onClick={() => onSelect(question)}
-            >
-              {question}
-            </Button>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        <MessageSquare className="w-4 h-4" />
+        <span className="font-medium">Pertanyaan Umum</span>
+      </div>
+      <div className="space-y-2">
+        {questions.map((question, index) => (
+          <button
+            key={index}
+            onClick={() => onSelectQuestion(question)}
+            className="w-full text-left p-2 text-sm hover:bg-[#F3F4F6] rounded-md transition-colors duration-200"
+          >
+            {question}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 } 

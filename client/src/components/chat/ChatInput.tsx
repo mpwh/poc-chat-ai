@@ -4,33 +4,36 @@ import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
 
 interface ChatInputProps {
-  onSend: (content: string) => void;
-  value: string;
-  onChange: (value: string) => void;
+  message: string;
+  setMessage: (message: string) => void;
+  onSend: () => void;
   disabled?: boolean;
 }
 
-export default function ChatInput({ onSend, value, onChange, disabled }: ChatInputProps) {
+export default function ChatInput({ message, setMessage, onSend, disabled }: ChatInputProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (value.trim()) {
-      onSend(value);
-      onChange("");
+    if (message.trim()) {
+      onSend();
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="flex gap-2">
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Type your message..."
-        className="flex-1"
+      <input
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder="Tanyakan sesuatu tentang dokumen Anda..."
+        className="flex-1 px-4 py-2 rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#818CF8] focus:border-transparent"
         disabled={disabled}
       />
-      <Button type="submit" disabled={!value.trim() || disabled}>
-        <Send className="h-4 w-4" />
-      </Button>
+      <button
+        type="submit"
+        disabled={!message.trim() || disabled}
+        className="p-2 rounded-md bg-[#818CF8] text-white hover:bg-[#6366F1] disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Send className="w-5 h-5" />
+      </button>
     </form>
   );
 }

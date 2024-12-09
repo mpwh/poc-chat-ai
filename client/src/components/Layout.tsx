@@ -70,7 +70,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 bg-[#F8F9FC]">
         {children}
       </main>
     </div>
