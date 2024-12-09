@@ -1,13 +1,11 @@
 import { fontFamily } from "tailwindcss/defaultTheme";
-import typography from '@tailwindcss/typography';
-import animate from "tailwindcss-animate";
 
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
   content: [
-    "./client/index.html",
-    "./client/src/**/*.{js,ts,jsx,tsx}",
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     container: {
@@ -58,7 +56,10 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      fontFamily: {
+        sans: ["var(--font-sans)", ...fontFamily.sans],
+      },
     },
   },
-  plugins: [animate, typography],
-} 
+  plugins: [require("@tailwindcss/typography"), require("tailwindcss-animate")],
+}; 

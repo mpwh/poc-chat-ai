@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,80 +11,72 @@ export default function DocumentUpload() {
   const queryClient = useQueryClient();
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    
-    // Validate file type
-    const allowedTypes = ['text/plain', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowedTypes.includes(file.type)) {
+
+    // Basic validation
+    if (!file.type.match(/^(text\/plain|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/)) {
       toast({
         title: "Error",
-        description: "Invalid file type. Please upload a PDF, DOC, or TXT file.",
+        description: "Please upload a PDF, DOC, or TXT file",
         variant: "destructive"
       });
-      event.target.value = '';
       return;
     }
 
-    // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast({
         title: "Error",
-        description: "File size exceeds 10MB limit.",
+        description: "File size must be less than 10MB",
         variant: "destructive"
       });
-      event.target.value = '';
       return;
     }
 
     try {
       setIsUploading(true);
       const formData = new FormData();
-      
-      // Create a sanitized title from the filename
-      const sanitizedTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9-_]/g, "_");
       formData.append("file", file);
-      formData.append("title", sanitizedTitle);
+      formData.append("title", file.name);
 
       const token = localStorage.getItem("token");
       if (!token) {
-        throw new Error("Please login to upload documents");
+        throw new Error("Authentication required");
       }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
       const res = await fetch("/api/documents", {
         method: "POST",
-        headers: { 
-          "Authorization": `Bearer ${token}`,
+        headers: {
+          "Authorization": `Bearer ${token}`
         },
-        body: formData,
-        signal: controller.signal,
+        body: formData
       });
-      
-      clearTimeout(timeoutId);
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Upload failed");
+        throw new Error("Failed to upload document");
       }
 
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
-      toast({ title: "Success", description: "Document uploaded successfully" });
+      await queryClient.invalidateQueries({ queryKey: ["documents"] });
+      
+      toast({
+        title: "Success",
+        description: "Document uploaded successfully"
+      });
+      
+      // Reset file input
       event.target.value = '';
       
     } catch (error) {
-      toast({ 
-        title: "Error", 
-        description: error instanceof Error ? error.message : "Upload failed", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Upload failed",
+        variant: "destructive"
       });
     } finally {
       setIsUploading(false);
     }
-  };
+  }, [toast, queryClient]);
 
   return (
     <Card className="border-dashed">
@@ -102,14 +94,14 @@ export default function DocumentUpload() {
             <p className="text-sm text-muted-foreground">
               PDF, DOC, TXT up to 10MB
             </p>
-            {isUploading ? (
+            {isUploading && (
               <div className="flex items-center gap-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                 <p className="text-sm text-muted-foreground">
                   Uploading document...
                 </p>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

@@ -4,34 +4,64 @@ import { db } from "../../db";
 import { users } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-const JWT_SECRET = process.env.JWT_SECRET || "";
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET must be set");
-}
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 const SALT_ROUNDS = 10;
 
-export interface LoginResponse {
-  token: string;
-  user: {
-    id: number;
-    email: string;
-    name: string;
+export async function loginUser(email: string, password: string) {
+  // Find user by email using drizzle-orm
+  const [user] = await db.select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  // Verify password
+  const isValid = await bcrypt.compare(password, user.password_hash);
+  if (!isValid) {
+    throw new Error("Invalid password");
+  }
+
+  // Generate JWT token
+  const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "24h" });
+
+  // Return user info and token
+  return {
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name
+    }
   };
 }
 
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
-}
+export async function createUser(email: string, password: string, name: string) {
+  // Check if user already exists
+  const [existingUser] = await db.select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
 
-export async function verifyPassword(
-  password: string,
-  hashedPassword: string
-): Promise<boolean> {
-  return bcrypt.compare(password, hashedPassword);
-}
+  if (existingUser) {
+    throw new Error("User already exists");
+  }
 
-export function generateToken(userId: number): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "24h" });
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+  // Create new user
+  const [user] = await db.insert(users)
+    .values({
+      email,
+      name: name || email.split("@")[0],
+      password_hash: hashedPassword,
+    })
+    .returning();
+
+  return user;
 }
 
 export function verifyToken(token: string): { userId: number } {
@@ -44,45 +74,4 @@ export function verifyToken(token: string): { userId: number } {
   } catch (error) {
     throw new Error("Invalid token");
   }
-}
-
-export async function createUser(email: string, password: string, name: string) {
-  const hashedPassword = await hashPassword(password);
-  const [user] = await db
-    .insert(users)
-    .values({
-      email,
-      name: name || email.split("@")[0],
-      password_hash: hashedPassword,
-    })
-    .returning();
-  return user;
-}
-
-export async function loginUser(
-  email: string,
-  password: string
-): Promise<LoginResponse> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-  });
-
-  if (!user || !user.password_hash) {
-    throw new Error("Invalid credentials");
-  }
-
-  const isValid = await verifyPassword(password, user.password_hash);
-  if (!isValid) {
-    throw new Error("Invalid credentials");
-  }
-
-  const token = generateToken(user.id);
-  return {
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-    },
-  };
 }

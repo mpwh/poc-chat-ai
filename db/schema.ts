@@ -12,11 +12,11 @@ export const users = pgTable("users", {
 
 export const documents = pgTable("documents", {
   id: serial("id").primaryKey(),
-  user_id: integer("user_id").references(() => users.id).notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),
   file_type: text("file_type").notNull(),
   file_url: text("file_url"),
+  user_id: integer("user_id").references(() => users.id).notNull(),
   created_at: timestamp("created_at").defaultNow(),
 });
 

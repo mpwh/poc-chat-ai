@@ -19,7 +19,8 @@
     "paths": {
       "@/*": ["./client/src/*"],
       "@db/*": ["./db/*"]
-    }
+    },
+    "types": ["node", "vite/client", "react", "react-dom", "@types/node"]
   },
   "include": ["client/src", "server", "db"],
   "references": [{ "path": "./tsconfig.node.json" }]

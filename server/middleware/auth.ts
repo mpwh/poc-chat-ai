@@ -11,11 +11,11 @@ export interface AuthRequest extends Request {
   };
 }
 
-export function authenticateToken(
+export const authenticateToken = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) {
+) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: "No token provided" });
@@ -30,4 +30,4 @@ export function authenticateToken(
   } catch (error) {
     res.status(401).json({ error: "Unauthorized" });
   }
-} 
+}; 
