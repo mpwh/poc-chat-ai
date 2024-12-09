@@ -8,28 +8,37 @@ import { AuthRequest } from "../middleware/auth.js";
 const router = Router();
 
 // Configure multer for memory storage
+const ALLOWED_FILE_TYPES = {
+  'text/plain': '.txt',
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
+};
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: MAX_FILE_SIZE,
+    files: 1 // Only allow one file per request
   },
   fileFilter: (_req, file, cb) => {
-    const allowedTypes = [
-      'text/plain',
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
+    const extension = ALLOWED_FILE_TYPES[file.mimetype as keyof typeof ALLOWED_FILE_TYPES];
     
-    console.log(`Validating file upload: ${file.originalname} (${file.mimetype})`);
-    
-    if (allowedTypes.includes(file.mimetype)) {
-      console.log(`File type ${file.mimetype} is allowed`);
-      cb(null, true);
-    } else {
-      console.log(`Rejected file type: ${file.mimetype}`);
-      cb(new Error(`Invalid file type: ${file.mimetype}. Please upload a PDF, DOC, or TXT file.`));
+    if (!extension) {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed types: ${Object.values(ALLOWED_FILE_TYPES).join(', ')}`));
+      return;
     }
+
+    // Validate file extension matches mimetype
+    const fileExtension = file.originalname.toLowerCase().split('.').pop();
+    if (fileExtension !== extension.substring(1)) {
+      cb(new Error(`File extension doesn't match the file type. Expected ${extension} for ${file.mimetype}`));
+      return;
+    }
+
+    cb(null, true);
   }
 }).single('file');
 
@@ -60,52 +69,79 @@ router.post("/", async (req: AuthRequest, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    upload.single('file')(req, res, async (err) => {
-      if (err instanceof multer.MulterError) {
-        return res.status(400).json({ 
-          error: err.code === 'LIMIT_FILE_SIZE' 
-            ? 'File size exceeds 10MB limit'
-            : err.message
-        });
-      } else if (err) {
-        return res.status(400).json({ error: err.message });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      try {
-        // Process file content based on type
-        let fileContent = '';
-        if (req.file.mimetype === 'text/plain') {
-          fileContent = req.file.buffer.toString('utf-8');
-        } else {
-          // For non-text files, store as base64
-          fileContent = req.file.buffer.toString('base64');
-        }
-
-        // Generate a unique file identifier
-        const fileUrl = `document-${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-        
-        // Save document to database
-        const [document] = await db.insert(documents)
-          .values({
-            title: req.body.title || req.file.originalname,
-            content: fileContent,
-            file_type: req.file.mimetype,
-            file_url: fileUrl,
-            user_id: userId,
-          })
-          .returning();
-
-        res.status(201).json(document);
-      } catch (dbError) {
-        console.error("Database error:", dbError);
-        res.status(500).json({ error: "Failed to save document to database" });
-      }
+    // Wrap multer upload in a promise
+    await new Promise<void>((resolve, reject) => {
+      upload(req, res, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    // Validate file size again (double check)
+    if (req.file.size > MAX_FILE_SIZE) {
+      return res.status(400).json({ 
+        error: `File size (${(req.file.size / (1024 * 1024)).toFixed(2)}MB) exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit` 
+      });
+    }
+
+    // Process file content based on type
+    let fileContent = '';
+    if (req.file.mimetype === 'text/plain') {
+      // For text files, validate UTF-8 encoding
+      try {
+        fileContent = req.file.buffer.toString('utf-8');
+        if (fileContent.length === 0) {
+          throw new Error('Empty file');
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid text file encoding' });
+      }
+    } else {
+      // For non-text files, store as base64
+      fileContent = req.file.buffer.toString('base64');
+    }
+
+    // Generate a sanitized file identifier
+    const timestamp = Date.now();
+    const sanitizedFileName = req.file.originalname
+      .replace(/[^a-zA-Z0-9.-]/g, '_')
+      .toLowerCase();
+    const fileUrl = `document-${timestamp}-${sanitizedFileName}`;
+    
+    // Save document to database with proper error handling
+    const [document] = await db.insert(documents)
+      .values({
+        title: req.body.title?.trim() || sanitizedFileName.replace(/\.[^/.]+$/, ""),
+        content: fileContent,
+        file_type: req.file.mimetype,
+        file_url: fileUrl,
+        user_id: userId,
+      })
+      .returning();
+
+    // Log successful upload
+    console.log(`Document uploaded successfully: ${document.id} by user ${userId}`);
+    
+    res.status(201).json({
+      id: document.id,
+      title: document.title,
+      file_type: document.file_type,
+      created_at: document.created_at
+    });
+
   } catch (error) {
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({ 
+        error: error.code === 'LIMIT_FILE_SIZE' 
+          ? `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit`
+          : error.message
+      });
+    }
+
     console.error("Error handling upload:", error);
     res.status(500).json({ 
       error: error instanceof Error ? error.message : "Failed to process upload request" 

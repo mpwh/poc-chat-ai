@@ -4,6 +4,10 @@ import { setupVite, serveStatic } from "./vite.js";
 import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+// Ensure environment variables are loaded
+import dotenv from "dotenv";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
