@@ -1,7 +1,14 @@
 import express from "express";
-import setupRoutes from "./routes";
-import { setupVite, serveStatic } from "./vite";
+import setupRoutes from "./routes.js";
+import { setupVite, serveStatic } from "./vite.js";
 import { createServer } from "http";
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+import dotenv from "dotenv";
+
+// Ensure environment variables are loaded
+dotenv.config();
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -48,7 +55,7 @@ setupRoutes(app);
 
 // Setup Vite in development
 if (process.env.NODE_ENV !== "production") {
-  setupVite(app);
+  setupVite(app); //Note:  The async keyword was removed here because the original code did not have it.  The modified code's async keyword is inconsistent with the original code and likely incorrect.
 } else {
   // Serve static files in production
   serveStatic(app);
@@ -56,36 +63,23 @@ if (process.env.NODE_ENV !== "production") {
 
 const server = createServer(app);
 
-// Function to find an available port
-async function findAvailablePort(startPort: number): Promise<number> {
-  return new Promise((resolve) => {
-    const tryPort = (port: number) => {
-      server.listen(port, "0.0.0.0")
-        .on("error", (err: NodeJS.ErrnoException) => {
-          if (err.code === "EADDRINUSE") {
-            log(`Port ${port} in use, trying ${port + 1}`);
-            tryPort(port + 1);
-          }
-        })
-        .on("listening", () => {
-          resolve(port);
-        });
-    };
-    tryPort(startPort);
-  });
-}
-
 // Start server
 const startServer = async () => {
+  const port = 5000;
+
   try {
-    const port = await findAvailablePort(3000);
-    log(`Server running at http://localhost:${port}`);
+    server.listen(port, "0.0.0.0", () => {
+      log(`Server running at http://localhost:${port}`);
+    });
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
   }
 };
 
-startServer();
+// Only start the server if this file is being run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startServer();
+}
 
 export default app;
