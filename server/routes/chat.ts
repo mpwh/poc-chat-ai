@@ -1,17 +1,13 @@
 import { Router } from "express";
-import { authenticateToken, AuthRequest } from "../middleware/auth.js";
-import { streamChatResponse } from "../lib/openai.js";
+import { AuthRequest } from "../middleware/auth";
+import { streamChatResponse } from "../lib/openai";
 
 const router = Router();
 
-router.post("/", authenticateToken, async (req: AuthRequest, res) => {
+router.post("/", async (req: AuthRequest, res) => {
   try {
     const { message } = req.body;
     
-    if (!req.user) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
     // Set headers for streaming
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

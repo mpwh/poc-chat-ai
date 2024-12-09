@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { FileText, Calendar, Trash2, Loader2 } from "lucide-react";
+import { FileText, Calendar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,47 +18,31 @@ interface DocumentListProps {
 export default function DocumentList({ documents = [] }: DocumentListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const handleDelete = async (id: number) => {
     try {
-      setDeletingId(id);
       const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Authentication required");
-      }
+      if (!token) throw new Error("Not authenticated");
 
       const res = await fetch(`/api/documents/${id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to delete document");
-      }
-
-      // Optimistically update the cache
-      queryClient.setQueryData<Document[]>(["documents"], (old) => 
-        old?.filter(doc => doc.id !== id) ?? []
-      );
+      if (!res.ok) throw new Error("Failed to delete document");
 
       await queryClient.invalidateQueries({ queryKey: ["documents"] });
 
       toast({
-        title: "Document Deleted",
-        description: "The document has been removed successfully",
+        title: "Success",
+        description: "Document deleted successfully",
       });
     } catch (error) {
-      console.error("Delete error:", error);
       toast({
-        title: "Deletion Failed",
-        description: error instanceof Error ? error.message : "Failed to delete document",
+        title: "Error",
+        description: "Failed to delete document",
         variant: "destructive",
       });
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -87,14 +70,9 @@ export default function DocumentList({ documents = [] }: DocumentListProps) {
             variant="ghost"
             size="icon"
             onClick={() => handleDelete(doc.id)}
-            disabled={deletingId === doc.id}
             className="text-muted-foreground hover:text-destructive"
           >
-            {deletingId === doc.id ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
+            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       ))}

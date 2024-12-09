@@ -12,75 +12,69 @@ export default function DocumentUpload() {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files?.length) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Basic validation
+    if (!file.type.match(/^(text\/plain|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/)) {
       toast({
-        title: "No File Selected",
-        description: "Please select a file to upload",
+        title: "Error",
+        description: "Please upload a PDF, DOC, or TXT file",
         variant: "destructive"
       });
       return;
     }
 
-    const file = event.target.files[0];
-    setIsUploading(true);
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "Error",
+        description: "File size must be less than 10MB",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
-      // File validation
-      const allowedTypes = {
-        'text/plain': 'TXT',
-        'application/pdf': 'PDF',
-        'application/msword': 'DOC',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX'
-      };
-
-      if (!Object.keys(allowedTypes).includes(file.type)) {
-        throw new Error(`Please upload a ${Object.values(allowedTypes).join(', ')} file.`);
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        throw new Error(`File size (${(file.size / (1024 * 1024)).toFixed(2)}MB) exceeds 10MB limit`);
-      }
-
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Authentication required");
-
+      setIsUploading(true);
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("title", file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9-_\s]/g, ''));
+      formData.append("title", file.name);
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication required");
+      }
 
       const res = await fetch("/api/documents", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${token}` },
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
         body: formData
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      if (!res.ok) {
+        throw new Error("Failed to upload document");
+      }
 
-      // Update cache
-      queryClient.setQueryData(["documents"], (old: any[]) => [...(old || []), data]);
       await queryClient.invalidateQueries({ queryKey: ["documents"] });
-
+      
       toast({
         title: "Success",
         description: "Document uploaded successfully"
       });
-
+      
+      // Reset file input
+      event.target.value = '';
+      
     } catch (error) {
-      console.error("Upload error:", error);
       toast({
-        title: "Upload Failed",
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Upload failed",
         variant: "destructive"
       });
-      
-      if (error instanceof Error && error.message.includes("Authentication required")) {
-        localStorage.removeItem("token");
-        window.location.href = "/login";
-      }
     } finally {
       setIsUploading(false);
-      event.target.value = ''; // Reset input
     }
   }, [toast, queryClient]);
 

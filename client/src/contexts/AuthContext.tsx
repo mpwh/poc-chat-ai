@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 
 interface User {
   id: number;
@@ -7,46 +7,57 @@ interface User {
 }
 
 interface AuthContextType {
-  user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  user: User | null;
   login: (token: string, user: User) => void;
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
 
-  const login = useCallback((token: string, userData: User) => {
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const savedUser = localStorage.getItem("user");
+    
+    if (token && savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    setIsLoading(false);
+  }, []);
+
+  const login = (token: string, user: User) => {
     localStorage.setItem("token", token);
-    setUser(userData);
-  }, []);
+    localStorage.setItem("user", JSON.stringify(user));
+    setUser(user);
+  };
 
-  const logout = useCallback(() => {
+  const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
-  }, []);
+  };
 
-  const value = useMemo(
-    () => ({
-      user,
+  return (
+    <AuthContext.Provider value={{
       isAuthenticated: !!user,
       isLoading,
+      user,
       login,
-      logout,
-    }),
-    [user, isLoading, login, logout]
+      logout
+    }}>
+      {children}
+    </AuthContext.Provider>
   );
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
