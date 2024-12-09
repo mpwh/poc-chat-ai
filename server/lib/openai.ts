@@ -31,13 +31,20 @@ export async function* streamChatResponse(
         const lastMessage = messages.data[0];
 
         if (lastMessage.content[0].type === 'text') {
-          // Split the response into sentences or chunks
           const text = lastMessage.content[0].text.value;
-          const chunks = text.match(/[^.!?]+[.!?]+/g) || [text];
+          
+          // Pre-process the text for better formatting
+          const formattedText = text
+            .replace(/\.\s*(?=[A-Z])/g, '.\n\n') // Add double newline after sentences followed by capital letters
+            .replace(/\.\s*(?=[#])/g, '.\n\n')   // Add double newline before headers
+            .replace(/(?<=\d\.)\s*/g, ' ')       // Ensure space after numbered lists
+            .replace(/\s*\n\s*/g, '\n')          // Normalize newlines
+            .trim();
+
+          const chunks = formattedText.split(/(?<=\.)\s+/); // Split by sentences
           
           for (const chunk of chunks) {
             yield chunk.trim();
-            // Add a small delay between chunks for natural feeling
             await new Promise(resolve => setTimeout(resolve, 100));
           }
           return;

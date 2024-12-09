@@ -34,3 +34,27 @@
     min-height: 100vh;
   }
 }
+
+.prose {
+  @apply text-inherit;
+}
+
+.prose p {
+  @apply leading-7;
+}
+
+.prose h3 {
+  @apply text-inherit;
+}
+
+.prose ul, .prose ol {
+  @apply my-2;
+}
+
+.prose li > p {
+  @apply my-0;
+}
+
+.prose :where(code):not(:where([class~="not-prose"] *)) {
+  @apply text-inherit;
+}

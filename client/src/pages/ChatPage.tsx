@@ -4,6 +4,9 @@ import ChatInput from "@/components/chat/ChatInput";
 import SuggestedQuestions from "@/components/chat/SuggestedQuestions";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 
 interface Message {
   content: string;
@@ -139,7 +142,33 @@ export default function ChatPage() {
                           : "bg-[#F3F4F6]"
                       }`}
                     >
-                      {msg.content}
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw]}
+                        className="prose prose-sm max-w-none dark:prose-invert"
+                        components={{
+                          h1: ({children}) => <h1 className="text-2xl font-bold my-4">{children}</h1>,
+                          h2: ({children}) => <h2 className="text-xl font-bold my-3">{children}</h2>,
+                          h3: ({children}) => <h3 className="text-lg font-semibold my-2">{children}</h3>,
+                          p: ({children}) => <p className="mb-4 last:mb-0">{children}</p>,
+                          ul: ({children}) => <ul className="list-disc pl-4 mb-4">{children}</ul>,
+                          ol: ({children}) => <ol className="list-decimal pl-4 mb-4">{children}</ol>,
+                          li: ({children}) => <li className="mb-1">{children}</li>,
+                          strong: ({children}) => <strong className="font-bold">{children}</strong>,
+                          code: ({inline, children}) => 
+                            inline ? 
+                              <code className="bg-gray-100 rounded px-1 py-0.5">{children}</code> :
+                              <pre className="bg-gray-100 rounded p-3 my-2 overflow-x-auto">
+                                <code>{children}</code>
+                              </pre>,
+                          blockquote: ({children}) => 
+                            <blockquote className="border-l-4 border-gray-200 pl-4 my-4 italic">
+                              {children}
+                            </blockquote>,
+                        }}
+                      >
+                        {msg.content || ''}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 ))}
