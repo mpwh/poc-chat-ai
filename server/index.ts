@@ -78,14 +78,25 @@ async function findAvailablePort(startPort: number): Promise<number> {
 // Start server
 const startServer = async () => {
   try {
-    const port = await findAvailablePort(3000);
-    log(`Server running at http://localhost:${port}`);
+    const port = 3000;
+    await new Promise<void>((resolve, reject) => {
+      server.listen(port, "0.0.0.0", () => {
+        log(`Server running at http://localhost:${port}`);
+        resolve();
+      }).on('error', (err) => {
+        console.error("Server listen error:", err);
+        reject(err);
+      });
+    });
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
   }
 };
 
-startServer();
+startServer().catch((error) => {
+  console.error("Server startup failed:", error);
+  process.exit(1);
+});
 
 export default app;

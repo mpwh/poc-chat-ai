@@ -15,20 +15,31 @@ export default function DocumentUpload() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Basic validation
-    if (!file.type.match(/^(text\/plain|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/)) {
+    // Reset input value to allow uploading the same file again
+    event.target.value = '';
+
+    // Detailed file type validation
+    const allowedTypes = {
+      'text/plain': 'TXT',
+      'application/pdf': 'PDF',
+      'application/msword': 'DOC',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX'
+    };
+
+    if (!Object.keys(allowedTypes).includes(file.type)) {
       toast({
-        title: "Error",
-        description: "Please upload a PDF, DOC, or TXT file",
+        title: "Invalid File Type",
+        description: `Please upload a ${Object.values(allowedTypes).join(', ')} file.`,
         variant: "destructive"
       });
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
+    const fileSizeInMB = file.size / (1024 * 1024);
+    if (fileSizeInMB > 10) {
       toast({
-        title: "Error",
-        description: "File size must be less than 10MB",
+        title: "File Too Large",
+        description: `File size (${fileSizeInMB.toFixed(2)}MB) exceeds 10MB limit`,
         variant: "destructive"
       });
       return;
@@ -38,11 +49,14 @@ export default function DocumentUpload() {
       setIsUploading(true);
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("title", file.name);
+      
+      // Create a clean title from the filename
+      const title = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9-_\s]/g, '');
+      formData.append("title", title);
 
       const token = localStorage.getItem("token");
       if (!token) {
-        throw new Error("Authentication required");
+        throw new Error("Please log in to upload documents");
       }
 
       const res = await fetch("/api/documents", {
@@ -53,24 +67,25 @@ export default function DocumentUpload() {
         body: formData
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        throw new Error("Failed to upload document");
+        throw new Error(data.error || "Failed to upload document");
       }
 
+      // Invalidate and refetch documents list
       await queryClient.invalidateQueries({ queryKey: ["documents"] });
       
       toast({
-        title: "Success",
-        description: "Document uploaded successfully"
+        title: "Upload Successful",
+        description: `${title} has been uploaded successfully`,
       });
       
-      // Reset file input
-      event.target.value = '';
-      
     } catch (error) {
+      console.error("Upload error:", error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Upload failed",
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "Failed to upload document",
         variant: "destructive"
       });
     } finally {

@@ -21,13 +21,17 @@ const upload = multer({
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ];
     
+    console.log(`Validating file upload: ${file.originalname} (${file.mimetype})`);
+    
     if (allowedTypes.includes(file.mimetype)) {
+      console.log(`File type ${file.mimetype} is allowed`);
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Please upload a PDF, DOC, or TXT file.'));
+      console.log(`Rejected file type: ${file.mimetype}`);
+      cb(new Error(`Invalid file type: ${file.mimetype}. Please upload a PDF, DOC, or TXT file.`));
     }
   }
-});
+}).single('file');
 
 // Get all documents for the authenticated user
 router.get("/", async (req: AuthRequest, res) => {
@@ -49,51 +53,62 @@ router.get("/", async (req: AuthRequest, res) => {
 });
 
 // Upload a document
-router.post("/", upload.single('file'), async (req: AuthRequest, res) => {
+router.post("/", async (req: AuthRequest, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // Log upload attempt
-    console.log("File upload attempt:", {
-      filename: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
+    upload.single('file')(req, res, async (err) => {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ 
+          error: err.code === 'LIMIT_FILE_SIZE' 
+            ? 'File size exceeds 10MB limit'
+            : err.message
+        });
+      } else if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      try {
+        // Process file content based on type
+        let fileContent = '';
+        if (req.file.mimetype === 'text/plain') {
+          fileContent = req.file.buffer.toString('utf-8');
+        } else {
+          // For non-text files, store as base64
+          fileContent = req.file.buffer.toString('base64');
+        }
+
+        // Generate a unique file identifier
+        const fileUrl = `document-${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        
+        // Save document to database
+        const [document] = await db.insert(documents)
+          .values({
+            title: req.body.title || req.file.originalname,
+            content: fileContent,
+            file_type: req.file.mimetype,
+            file_url: fileUrl,
+            user_id: userId,
+          })
+          .returning();
+
+        res.status(201).json(document);
+      } catch (dbError) {
+        console.error("Database error:", dbError);
+        res.status(500).json({ error: "Failed to save document to database" });
+      }
     });
-    
-    // Read and process file content
-    let fileContent = '';
-    if (req.file.mimetype === 'text/plain') {
-      fileContent = req.file.buffer.toString('utf-8');
-    } else {
-      // For other file types, store as base64
-      fileContent = req.file.buffer.toString('base64');
-    }
-
-    // Generate a unique file identifier
-    const fileUrl = `document-${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    
-    const [document] = await db.insert(documents)
-      .values({
-        title: req.body.title || req.file.originalname,
-        content: fileContent,
-        file_type: req.file.mimetype,
-        file_url: fileUrl,
-        user_id: req.user.id,
-      })
-      .returning();
-
-    res.status(201).json(document);
   } catch (error) {
-    console.error("Error uploading document:", error);
+    console.error("Error handling upload:", error);
     res.status(500).json({ 
-      error: error instanceof Error ? error.message : "Failed to upload document" 
+      error: error instanceof Error ? error.message : "Failed to process upload request" 
     });
   }
 });
@@ -108,6 +123,7 @@ router.delete("/:id", async (req: AuthRequest, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Only allow deletion of user's own documents
     await db.delete(documents)
       .where(and(
         eq(documents.id, documentId),
@@ -121,4 +137,4 @@ router.delete("/:id", async (req: AuthRequest, res) => {
   }
 });
 
-export default router; 
+export default router;
